@@ -1,0 +1,384 @@
+{
+  "name": "AI Lead Response Bot - Portfolio Template",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Setup checklist\n1. Add an HTTP Header Auth credential named \"OpenAI API Key\" (Header Name: Authorization, Value: Bearer YOUR_OPENAI_KEY) and attach it on the \"Draft AI Response\" node.\n2. Add an SMTP credential for sending email and attach it on both Email Send nodes.\n3. Replace YOUR_BUSINESS_EMAIL and YOUR_SALES_TEAM_EMAIL placeholders in the two Email Send nodes.\n4. Point your web form / lead-capture tool to this Webhook's Production URL, posting JSON like: { \"name\": \"...\", \"email\": \"...\", \"company\": \"...\", \"message\": \"...\" }.\n5. Test with the 'Execute workflow' button using sample data before activating.",
+        "height": 380,
+        "width": 380
+      },
+      "id": "6dfd2b51-6894-4e22-98f7-a0c037015ad2",
+      "name": "Setup Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -944,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "new-lead",
+        "options": {}
+      },
+      "id": "39c9d826-26a2-4f12-81e5-c9212d315ac0",
+      "name": "New Lead Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -944,
+        288
+      ],
+      "webhookId": "new-lead-webhook"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "lead_name",
+              "value": "={{ $json.body.name }}"
+            },
+            {
+              "name": "lead_email",
+              "value": "={{ $json.body.email }}"
+            },
+            {
+              "name": "lead_company",
+              "value": "={{ $json.body.company }}"
+            },
+            {
+              "name": "lead_message",
+              "value": "={{ $json.body.message }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "398e9e56-451c-47d9-b49e-e4733e511841",
+      "name": "Normalize Lead Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        -720,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const leadItems = $('Normalize Lead Data').all();\nreturn items.map((item, i) => {\n  const lead = leadItems[i] ? leadItems[i].json : {};\n  let parsed;\n  try {\n    parsed = JSON.parse(item.json.candidates[0].content.parts[0].text);\n  } catch (e) {\n    parsed = { qualified: false, score: 0, reply_email_body: 'Could not parse AI response.' };\n  }\n  return {\n    json: {\n      lead_name: lead.lead_name,\n      lead_email: lead.lead_email,\n      lead_company: lead.lead_company,\n      lead_message: lead.lead_message,\n      qualified: parsed.qualified,\n      score: parsed.score,\n      reply_email_body: parsed.reply_email_body\n    }\n  };\n});"
+      },
+      "id": "ee1cfa75-9fdb-4fc6-9525-c740cd1ced57",
+      "name": "Parse AI Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -272,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.qualified }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "32bbc475-960d-44c0-b05b-c2c26eaf3a98",
+      "name": "Is Qualified?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -48,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "YOUR_BUSINESS_EMAIL@example.com",
+        "toEmail": "={{ $json.lead_email }}",
+        "subject": "={{ 'Thanks for reaching out, ' + $json.lead_name }}",
+        "text": "={{ $json.reply_email_body }}",
+        "options": {}
+      },
+      "id": "5aec2ffd-e573-48ca-94dc-848f16c36738",
+      "name": "Send Reply to Lead",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [
+        176,
+        96
+      ],
+      "webhookId": "21507dc2-6aac-4a7d-bd8f-0fd25badf9b3",
+      "credentials": {
+        "smtp": {
+          "id": "REPLACE_WITH_YOUR_SMTP_CREDENTIAL_ID",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "YOUR_BUSINESS_EMAIL@example.com",
+        "toEmail": "YOUR_SALES_TEAM_EMAIL@example.com",
+        "subject": "Lead needs manual review",
+        "text": "={{ 'A new lead was not auto-qualified by AI.\\nName: ' + $json.lead_name + '\\nEmail: ' + $json.lead_email + '\\nCompany: ' + $json.lead_company + '\\nMessage: ' + $json.lead_message + '\\nAI score: ' + $json.score }}",
+        "options": {}
+      },
+      "id": "38f796d5-9f28-41bf-9b73-fc007dfaeb8a",
+      "name": "Notify Sales Team",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [
+        176,
+        288
+      ],
+      "webhookId": "43ef6add-e7d7-49de-a321-1916049eb744",
+      "credentials": {
+        "smtp": {
+          "id": "REPLACE_WITH_YOUR_SMTP_CREDENTIAL_ID",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ systemInstruction: { parts: [ { text: \"You are a sales assistant. Given a lead's name, company, and message, decide if they are a qualified potential customer, give a score from 1 to 10, and draft a short 2 to 3 sentence warm personalized email reply that answers their question and invites a next step. Respond with only a valid JSON object with exactly three fields: qualified (true or false), score (a number from 1 to 10), and reply_email_body (a string). Do not include any text outside the JSON object.\" } ] }, contents: [ { role: \"user\", parts: [ { text: \"Name: \" + $json.lead_name + \". Company: \" + $json.lead_company + \". Message: \" + $json.lead_message } ] } ], generationConfig: { temperature: 0.4 } }) }}",
+        "options": {}
+      },
+      "id": "72b71e33-94ca-4678-9133-96cfd7408f15",
+      "name": "Draft AI Response (Gemini)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -496,
+        288
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_GEMINI_CREDENTIAL_ID",
+          "name": "Gemini API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Lead Bot Log",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Timestamp": "= {{ $now }}",
+            "Name": "= {{ $json.lead_name }}",
+            "Email": "={{ $json.lead_email }}",
+            "Company": "={{ $json.lead_company }}",
+            "Message": "={{ $json.lead_message }}",
+            "Score": "={{ $json.score }}",
+            "Qualified": "={{ $json.qualified }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Timestamp",
+              "displayName": "Timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Company",
+              "displayName": "Company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Message",
+              "displayName": "Message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Score",
+              "displayName": "Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Qualified",
+              "displayName": "Qualified",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -48,
+        384
+      ],
+      "id": "48c52921-1ff4-4c3a-a1a2-774a38013c25",
+      "name": "Log to Google Sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "New Lead Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Lead Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Lead Data": {
+      "main": [
+        [
+          {
+            "node": "Draft AI Response (Gemini)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Output": {
+      "main": [
+        [
+          {
+            "node": "Is Qualified?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log to Google Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Qualified?": {
+      "main": [
+        [
+          {
+            "node": "Send Reply to Lead",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify Sales Team",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft AI Response (Gemini)": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "d19cc8c4-66e4-4b53-bbdf-1e29b14984a8",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "REDACTED_INSTANCE_ID"
+  },
+  "id": "rw4dha8PpRloNX9z",
+  "tags": []
+}
