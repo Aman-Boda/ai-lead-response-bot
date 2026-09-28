@@ -9,9 +9,9 @@ An n8n automation that reads incoming sales leads, uses AI to judge and respond 
 3. Google Gemini reads the message, detects its language, scores the lead 1–10, and drafts a short, personalized reply — written in whatever language the lead wrote in
 4. The workflow branches on that score:
    - **Qualified** → the AI's reply is emailed straight to the lead
-   - **Not qualified** → the internal team is alerted on three channels at once: email, Slack, and WhatsApp
+   - **Not qualified** → the internal team is alerted by email and Slack. A WhatsApp alert is also built into the workflow, but it ships **disabled** until a client's own approved message template is set up (see [Activating WhatsApp](#activating-whatsapp-when-a-client-needs-it))
 5. Every lead — qualified or not — is logged to a Google Sheet automatically, acting as a lightweight CRM
-6. Every external call (AI, email, Sheets) retries automatically on failure; if something still fails after retrying, an alert email fires so it's never silently dropped
+6. The AI call retries with backoff on failure. The email, Sheets, Slack, and WhatsApp steps also retry, and if one still fails, an alert email fires so the failure is never silent
 
 ## Architecture
 
@@ -22,11 +22,11 @@ Webhook (secured) → Normalize Data → Check Duplicate ──duplicate──�
                                             ↓
                                      AI Draft (Gemini, multilingual) → Parse Output → Qualified?
                                                                                         ├── Yes → Send Reply to Lead
-                                                                                        └── No  → Email + Slack + WhatsApp, all at once
+                                                                                        └── No  → Email + Slack  (+ WhatsApp, shipped disabled)
                                                     (in parallel) → Log to Google Sheet
 
-Every external node (AI / email / Sheets / Slack / WhatsApp) retries on failure →
-still failing after retries → routes to an "Alert Me" email instead of failing silently
+Email / Sheets / Slack / WhatsApp steps retry on failure → still failing after retries →
+routed to an "Alert Me" email instead of failing silently
 ```
 
 ## Tech stack
@@ -36,7 +36,7 @@ still failing after retries → routes to an "Alert Me" email instead of failing
 - **Gmail (SMTP)** — sends the AI-drafted reply and internal notifications
 - **Google Sheets API (OAuth2)** — logs every lead as a running record
 - **Slack Incoming Webhooks** — real-time team alerts for leads needing review
-- **Twilio WhatsApp API** — a second alert channel, built and tested against Twilio's sandbox
+- **Twilio WhatsApp API** — a third alert channel, wired in but disabled by default. Authentication, request format, and the sandbox connection work; actually sending is gated on a client's approved message template
 
 ## Technical challenges solved
 
@@ -51,21 +51,39 @@ This wasn't just wiring nodes together — a few real production issues came up 
 - **Multi-language support turned out to need zero new nodes**: rather than adding a separate language-detection step, the AI prompt itself was updated with one instruction — reply in the same language the lead wrote in. Gemini already understands language; the fix was asking it correctly, not adding more infrastructure.
 - **A silently empty request body**: the Slack alert kept failing with `invalid_payload`, even after multiple rewrites of the expression. The actual cause, found by capturing the real outbound request with a request-inspector tool, was that the node was sending a completely empty body — 0 bytes — regardless of what the field appeared to contain. No amount of fixing the *expression* was ever going to solve a body that wasn't being sent at all. Deleting the node and rebuilding it from scratch resolved it instantly, confirming the corruption was in the node's saved state, not the logic. Lesson: when a field's *visible* content looks correct but behavior stays broken, verify what's actually on the wire before continuing to edit the field.
 - **Third-party example IDs aren't universal**: an early attempt to use a WhatsApp Content Template SID pulled from Twilio's own documentation failed, because that ID was illustrative example text, not a real, reusable identifier — every Twilio account has its own unique templates. Good reminder to treat doc examples as illustrations of *shape*, not literal values to copy in.
-- **Knowing when to stop**: WhatsApp's production template requires per-business content, submitted for Meta's approval — not something worth building speculatively before a real client needs it. The integration's plumbing (auth, request format, sandbox connection) is fully built and tested; the account-specific template is deliberately left as the one step done at client activation, not before.
+- **Knowing when to stop**: WhatsApp's production template requires per-business content, submitted for Meta's approval — not something worth building speculatively before a real client needs it. The integration's plumbing (auth, request format, sandbox connection) is fully built and tested; the account-specific template is deliberately left as the one step done at client activation, not before. Until then the node is disabled in the shipped template, so it doesn't fail on every unqualified lead and bury real alerts under noise.
 
 ## Setup
 
 1. Import `workflow.json` into your n8n instance
 2. Create these credentials:
-   - Header Auth credential for the Gemini API key
+   - Header Auth credential for the webhook (header name `X-Webhook-Secret`, value: any long random string), attached to the webhook node
+   - Header Auth credential for the Gemini API key (header name `x-goog-api-key`)
    - SMTP credential for sending email
-   - Google Sheets OAuth2 credential
-3. Update the placeholder sender/recipient emails in the Email Send nodes
-4. Point your lead source (a website form, Typeform, etc.) at the workflow's Production webhook URL
+   - Google Sheets OAuth2 credential (then re-select your spreadsheet in the Sheets node)
+3. Replace the placeholder sender/recipient emails in the Email Send nodes
+4. Paste your Slack Incoming Webhook URL into the "Send Slack Alert" node
+5. Point your lead source (a website form, Typeform, etc.) at the workflow's Production webhook URL, sending the secret header with each request
+
+## Activating WhatsApp (when a client needs it)
+
+The WhatsApp alert node is already built and wired into the workflow, but it ships **disabled**. WhatsApp only allows business-initiated messages that use a pre-approved template, and that template contains the client's own wording and is submitted for approval under their account, so it can't be prepared in advance. When a client asks for WhatsApp alerts, the developer does this:
+
+1. Confirm the client has a WhatsApp-enabled sender through Twilio (the Twilio sandbox is for testing only)
+2. Write the alert message as a Content Template in Twilio's Content Template Builder and submit it for WhatsApp approval
+3. Once approved, open the "Send WhatsApp Alert (Twilio)" node and set:
+   - the Twilio credential (Basic Auth: Account SID and Auth Token) and the Account SID in the URL
+   - `From`: the client's WhatsApp sender
+   - `To`: the number that should receive alerts
+   - `ContentSid`: the approved template's SID
+   - `ContentVariables`: map the lead fields to the template's variables
+4. Enable the node and send a test lead that will not qualify
+
+Until then, the email and Slack alerts cover the "needs review" case.
 
 ## What I'd build next
 
-- A real, Meta-approved WhatsApp template for production client use (the plumbing is done; this is the one deliberately deferred, client-specific piece)
+- Activate WhatsApp for a real client, following the steps above (the plumbing is done; the template is the one deliberately deferred, client-specific piece)
 - Always-on hosting on a real server instead of a local machine, so it runs independent of any one computer
 - A lightweight dashboard over the Google Sheet log
 

@@ -3,23 +3,24 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## Setup checklist\n1. Add an HTTP Header Auth credential named \"OpenAI API Key\" (Header Name: Authorization, Value: Bearer YOUR_OPENAI_KEY) and attach it on the \"Draft AI Response\" node.\n2. Add an SMTP credential for sending email and attach it on both Email Send nodes.\n3. Replace YOUR_BUSINESS_EMAIL and YOUR_SALES_TEAM_EMAIL placeholders in the two Email Send nodes.\n4. Point your web form / lead-capture tool to this Webhook's Production URL, posting JSON like: { \"name\": \"...\", \"email\": \"...\", \"company\": \"...\", \"message\": \"...\" }.\n5. Test with the 'Execute workflow' button using sample data before activating.",
-        "height": 380,
-        "width": 380
+        "content": "## Setup checklist\n1. Create a Header Auth credential for the webhook (Name: X-Webhook-Secret, Value: any long random string) and attach it to \"New Lead Webhook\". Callers must send that header.\n2. Create a Header Auth credential for the Gemini API (Name: x-goog-api-key, Value: your key) and attach it to \"Draft AI Response (Gemini)\".\n3. Create an SMTP credential and attach it to the three Email Send nodes. Replace the YOUR_..._EMAIL placeholders in them.\n4. Create a Google Sheets OAuth2 credential, then re-select your spreadsheet in \"Log to Google Sheet\" (columns: Timestamp, Name, Email, Company, Message, Score, Qualified).\n5. Paste your Slack Incoming Webhook URL into \"Send Slack Alert\".\n6. WhatsApp (Twilio) is wired in but DISABLED. To use it: add a Basic Auth credential (Account SID / Auth Token), set your Account SID in the URL, your own approved Content Template SID and phone number, then enable the node.\n7. Point your lead form at the Production webhook URL and send the secret header.",
+        "height": 500,
+        "width": 520
       },
       "id": "6dfd2b51-6894-4e22-98f7-a0c037015ad2",
       "name": "Setup Notes",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -944,
-        464
+        -1712,
+        736
       ]
     },
     {
       "parameters": {
         "httpMethod": "POST",
         "path": "new-lead",
+        "authentication": "headerAuth",
         "options": {}
       },
       "id": "39c9d826-26a2-4f12-81e5-c9212d315ac0",
@@ -27,10 +28,16 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
       "position": [
-        -944,
-        288
+        -1712,
+        560
       ],
-      "webhookId": "new-lead-webhook"
+      "webhookId": "new-lead-webhook",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_WEBHOOK_SECRET_CREDENTIAL_ID",
+          "name": "Webhook Secret"
+        }
+      }
     },
     {
       "parameters": {
@@ -51,6 +58,10 @@
             {
               "name": "lead_message",
               "value": "={{ $json.body.message }}"
+            },
+            {
+              "name": "system_prompt",
+              "value": "You are a sales assistant. Given a lead's name, company, and message, decide if they are a qualified potential customer, give a score from 1 to 10, and draft a short 2 to 3 sentence warm personalized email reply, written in the SAME language as the lead's message (detect their language automatically and always reply in that language, even if it is not English), that answers their question and invites a next step. Respond with only a valid JSON object with exactly three fields: qualified (true or false), score (a number from 1 to 10), and reply_email_body (a string). Do not include any text outside the JSON object."
             }
           ]
         },
@@ -61,8 +72,8 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 1,
       "position": [
-        -720,
-        288
+        -1520,
+        560
       ]
     },
     {
@@ -74,8 +85,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -272,
-        288
+        -592,
+        656
       ]
     },
     {
@@ -94,8 +105,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
       "position": [
-        -48,
-        192
+        -368,
+        512
       ]
     },
     {
@@ -111,16 +122,20 @@
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2,
       "position": [
-        176,
-        96
+        0,
+        352
       ],
       "webhookId": "21507dc2-6aac-4a7d-bd8f-0fd25badf9b3",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
       "credentials": {
         "smtp": {
           "id": "REPLACE_WITH_YOUR_SMTP_CREDENTIAL_ID",
           "name": "SMTP account"
         }
-      }
+      },
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -135,16 +150,20 @@
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2,
       "position": [
-        176,
-        288
+        0,
+        512
       ],
       "webhookId": "43ef6add-e7d7-49de-a321-1916049eb744",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
       "credentials": {
         "smtp": {
           "id": "REPLACE_WITH_YOUR_SMTP_CREDENTIAL_ID",
           "name": "SMTP account"
         }
-      }
+      },
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -163,7 +182,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ systemInstruction: { parts: [ { text: \"You are a sales assistant. Given a lead's name, company, and message, decide if they are a qualified potential customer, give a score from 1 to 10, and draft a short 2 to 3 sentence warm personalized email reply that answers their question and invites a next step. Respond with only a valid JSON object with exactly three fields: qualified (true or false), score (a number from 1 to 10), and reply_email_body (a string). Do not include any text outside the JSON object.\" } ] }, contents: [ { role: \"user\", parts: [ { text: \"Name: \" + $json.lead_name + \". Company: \" + $json.lead_company + \". Message: \" + $json.lead_message } ] } ], generationConfig: { temperature: 0.4 } }) }}",
+        "jsonBody": "={{ JSON.stringify($json.gemini_request_body) }}",
         "options": {}
       },
       "id": "72b71e33-94ca-4678-9133-96cfd7408f15",
@@ -171,11 +190,11 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -496,
-        288
+        -784,
+        656
       ],
       "retryOnFail": true,
-      "maxTries": 5,
+      "maxTries": 2,
       "waitBetweenTries": 5000,
       "credentials": {
         "httpHeaderAuth": {
@@ -286,17 +305,198 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.7,
       "position": [
-        -48,
-        384
+        -384,
+        816
       ],
       "id": "48c52921-1ff4-4c3a-a1a2-774a38013c25",
       "name": "Log to Google Sheet",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "REPLACE_WITH_YOUR_SHEETS_CREDENTIAL_ID",
           "name": "Google Sheets account"
         }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "fromEmail": "YOUR_BUSINESS_EMAIL@example.com",
+        "toEmail": "YOUR_ALERT_EMAIL@example.com",
+        "subject": "Workflow error - check execution",
+        "html": "={{ 'A step failed after retries. Lead: ' + $json.lead_name + ' (' + $json.lead_email + '). Check the Executions tab for details.' }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        640,
+        848
+      ],
+      "id": "1986b892-ab07-4488-8a6d-7191bae74de2",
+      "name": "Alert Me - Manual Attention Needed",
+      "webhookId": "926d82eb-0933-460d-9a20-038bb17885bc",
+      "credentials": {
+        "smtp": {
+          "id": "REPLACE_WITH_YOUR_SMTP_CREDENTIAL_ID",
+          "name": "SMTP account"
+        }
       }
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const staticData = $getWorkflowStaticData('global');\n  if (!staticData.recentLeads) staticData.recentLeads = {};\n\n  const email = item.json.lead_email;\n  const now = Date.now();\n  const windowMs = 5 * 60 * 1000; // 5 minutes\n\n  for (const key in staticData.recentLeads) {\n    if (now - staticData.recentLeads[key] > windowMs) {\n      delete staticData.recentLeads[key];\n    }\n  }\n\n  const isDuplicateBool = staticData.recentLeads[email] !== undefined;\n\n  if (!isDuplicateBool) {\n    staticData.recentLeads[email] = now;\n  }\n\n  return { json: { ...item.json, isDuplicate: isDuplicateBool ? \"true\" : \"false\" } };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1344,
+        560
+      ],
+      "id": "6316e0ee-e3cd-4396-b18f-ec5e074614de",
+      "name": "Check Duplicate"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "6aca7ff5-c2c3-436a-b990-40cd1e1cd731",
+              "leftValue": "={{ $json.isDuplicate }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -1168,
+        560
+      ],
+      "id": "139a7e3c-f830-40db-8901-5397049b0d78",
+      "name": "Is Duplicate?"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -976,
+        480
+      ],
+      "id": "fb7bde9f-44df-437f-acd7-ed5dc8fbd0ce",
+      "name": "Duplicate - Skipped"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.twilio.com/2010-04-01/Accounts/YOUR_TWILIO_ACCOUNT_SID/Messages.json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "From",
+              "value": "whatsapp:+14155238886"
+            },
+            {
+              "name": "To",
+              "value": "whatsapp:+YOUR_TEAM_PHONE_NUMBER"
+            },
+            {
+              "name": "ContentSid",
+              "value": "YOUR_APPROVED_TEMPLATE_SID"
+            },
+            {
+              "name": "ContentVariables",
+              "value": "={{ JSON.stringify({ \"1\": $json.lead_name, \"2\": $json.lead_message }) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        0,
+        160
+      ],
+      "id": "8116d17a-128d-4f27-bc6e-cf49493f3766",
+      "name": "Send WhatsApp Alert (Twilio)",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "REPLACE_WITH_YOUR_TWILIO_CREDENTIAL_ID",
+          "name": "Twilio Basic Auth"
+        }
+      },
+      "disabled": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const systemPrompt = \"You are a sales assistant. Given a lead's name, company, and message, decide if they are a qualified potential customer, give a score from 1 to 10, and draft a short 2 to 3 sentence warm personalized email reply, written in the SAME language as the lead's message (detect their language automatically and always reply in that language, even if it is not English), that answers their question and invites a next step. Respond with only a valid JSON object with exactly three fields: qualified (true or false), score (a number from 1 to 10), and reply_email_body (a string). Do not include any text outside the JSON object.\";\n\n  const userText = \"Name: \" + item.json.lead_name + \". Company: \" + item.json.lead_company + \". Message: \" + item.json.lead_message;\n\n  const requestBody = {\n    systemInstruction: { parts: [ { text: systemPrompt } ] },\n    contents: [ { role: \"user\", parts: [ { text: userText } ] } ],\n    generationConfig: { temperature: 0.4 }\n  };\n\n  return { json: { ...item.json, gemini_request_body: requestBody } };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -976,
+        656
+      ],
+      "id": "949f8635-f300-446d-966d-54a59f6fcaa5",
+      "name": "Build Gemini Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const slackPayload = {\n    text: 'New lead needs review: ' + item.json.lead_name + ' (' + item.json.lead_email + ') - ' + item.json.lead_message\n  };\n  return { json: { ...item.json, slack_payload: slackPayload } };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -192,
+        672
+      ],
+      "id": "a20f2eca-ebd3-49bf-84f5-32c12adaed19",
+      "name": "Build Slack Message"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.slack_payload) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        0,
+        672
+      ],
+      "id": "5e014e07-63e7-4b76-8efb-6767b9133fc0",
+      "name": "Send Slack Alert",
+      "retryOnFail": true,
+      "onError": "continueErrorOutput"
     }
   ],
   "pinData": {},
@@ -316,7 +516,7 @@
       "main": [
         [
           {
-            "node": "Draft AI Response (Gemini)",
+            "node": "Check Duplicate",
             "type": "main",
             "index": 0
           }
@@ -353,6 +553,16 @@
             "node": "Notify Sales Team",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Build Slack Message",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send WhatsApp Alert (Twilio)",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -367,14 +577,130 @@
           }
         ]
       ]
+    },
+    "Send Reply to Lead": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Alert Me - Manual Attention Needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Sales Team": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Alert Me - Manual Attention Needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log to Google Sheet": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Alert Me - Manual Attention Needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert Me - Manual Attention Needed": {
+      "main": [
+        []
+      ]
+    },
+    "Check Duplicate": {
+      "main": [
+        [
+          {
+            "node": "Is Duplicate?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Duplicate?": {
+      "main": [
+        [
+          {
+            "node": "Duplicate - Skipped",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Gemini Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send WhatsApp Alert (Twilio)": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Alert Me - Manual Attention Needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Gemini Request": {
+      "main": [
+        [
+          {
+            "node": "Draft AI Response (Gemini)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Slack Message": {
+      "main": [
+        [
+          {
+            "node": "Send Slack Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Slack Alert": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Alert Me - Manual Attention Needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
-  "active": true,
+  "active": false,
   "settings": {
     "executionOrder": "v1",
     "availableInMCP": false
   },
-  "versionId": "d19cc8c4-66e4-4b53-bbdf-1e29b14984a8",
+  "versionId": "5b42a1cb-19ff-4cc0-97d5-88f9a2885e8c",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "REDACTED_INSTANCE_ID"
