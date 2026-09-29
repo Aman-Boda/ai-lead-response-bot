@@ -3,8 +3,8 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## Setup checklist\n1. Create a Header Auth credential for the webhook (Name: X-Webhook-Secret, Value: any long random string) and attach it to \"New Lead Webhook\". Callers must send that header.\n2. Create a Header Auth credential for the Gemini API (Name: x-goog-api-key, Value: your key) and attach it to \"Draft AI Response (Gemini)\".\n3. Create an SMTP credential and attach it to the three Email Send nodes. Replace the YOUR_..._EMAIL placeholders in them.\n4. Create a Google Sheets OAuth2 credential, then re-select your spreadsheet in \"Log to Google Sheet\" (columns: Timestamp, Name, Email, Company, Message, Score, Qualified).\n5. Paste your Slack Incoming Webhook URL into \"Send Slack Alert\".\n6. WhatsApp (Twilio) is wired in but DISABLED. To use it: add a Basic Auth credential (Account SID / Auth Token), set your Account SID in the URL, your own approved Content Template SID and phone number, then enable the node.\n7. Point your lead form at the Production webhook URL and send the secret header.",
-        "height": 500,
+        "content": "## Setup checklist\n1. Create a Header Auth credential for the webhook (Name: X-Webhook-Secret, Value: any long random string) and attach it to \"New Lead Webhook\". Callers must send that header.\n2. Create a Header Auth credential for the Gemini API (Name: x-goog-api-key, Value: your key) and attach it to \"Draft AI Response (Gemini)\".\n3. Create an SMTP credential and attach it to the three Email Send nodes. Replace the YOUR_..._EMAIL placeholders in them.\n4. Create a Google Sheets OAuth2 credential, then re-select your spreadsheet in \"Log to Google Sheet\" (columns: Timestamp, Name, Email, Company, Message, Score, Qualified).\n5. Paste your Slack Incoming Webhook URL into \"Send Slack Alert\".\n6. WhatsApp (Twilio) is wired in but DISABLED. To use it: add a Basic Auth credential (Account SID / Auth Token), set your Account SID in the URL, your own approved Content Template SID and phone number, then enable the node.\n7. Point your lead form at the Production webhook URL and send the secret header.\n8. Every external step (AI, email, Sheets, Slack, WhatsApp) retries on failure and routes to \"Alert Me\" if it still fails.",
+        "height": 520,
         "width": 520
       },
       "id": "6dfd2b51-6894-4e22-98f7-a0c037015ad2",
@@ -85,8 +85,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -592,
-        656
+        -640,
+        512
       ]
     },
     {
@@ -105,8 +105,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
       "position": [
-        -368,
-        512
+        -448,
+        352
       ]
     },
     {
@@ -122,8 +122,8 @@
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2,
       "position": [
-        0,
-        352
+        -32,
+        16
       ],
       "webhookId": "21507dc2-6aac-4a7d-bd8f-0fd25badf9b3",
       "retryOnFail": true,
@@ -150,8 +150,8 @@
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2,
       "position": [
-        0,
-        512
+        -48,
+        352
       ],
       "webhookId": "43ef6add-e7d7-49de-a321-1916049eb744",
       "retryOnFail": true,
@@ -191,17 +191,18 @@
       "typeVersion": 4.2,
       "position": [
         -784,
-        656
+        784
       ],
       "retryOnFail": true,
-      "maxTries": 2,
+      "maxTries": 3,
       "waitBetweenTries": 5000,
       "credentials": {
         "httpHeaderAuth": {
           "id": "REPLACE_WITH_YOUR_GEMINI_CREDENTIAL_ID",
           "name": "Gemini API Key"
         }
-      }
+      },
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -305,8 +306,8 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.7,
       "position": [
-        -384,
-        816
+        -448,
+        656
       ],
       "id": "48c52921-1ff4-4c3a-a1a2-774a38013c25",
       "name": "Log to Google Sheet",
@@ -435,7 +436,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        0,
+        -48,
         160
       ],
       "id": "8116d17a-128d-4f27-bc6e-cf49493f3766",
@@ -472,8 +473,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -192,
-        672
+        -240,
+        512
       ],
       "id": "a20f2eca-ebd3-49bf-84f5-32c12adaed19",
       "name": "Build Slack Message"
@@ -490,8 +491,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        0,
-        672
+        -48,
+        512
       ],
       "id": "5e014e07-63e7-4b76-8efb-6767b9133fc0",
       "name": "Send Slack Alert",
@@ -572,6 +573,13 @@
         [
           {
             "node": "Parse AI Output",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert Me - Manual Attention Needed",
             "type": "main",
             "index": 0
           }
@@ -700,7 +708,7 @@
     "executionOrder": "v1",
     "availableInMCP": false
   },
-  "versionId": "5b42a1cb-19ff-4cc0-97d5-88f9a2885e8c",
+  "versionId": "f8be29f7-3e12-43fa-97f1-622790ebbaa2",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "REDACTED_INSTANCE_ID"

@@ -11,7 +11,7 @@ An n8n automation that reads incoming sales leads, uses AI to judge and respond 
    - **Qualified** → the AI's reply is emailed straight to the lead
    - **Not qualified** → the internal team is alerted by email and Slack. A WhatsApp alert is also built into the workflow, but it ships **disabled** until a client's own approved message template is set up (see [Activating WhatsApp](#activating-whatsapp-when-a-client-needs-it))
 5. Every lead — qualified or not — is logged to a Google Sheet automatically, acting as a lightweight CRM
-6. The AI call retries with backoff on failure. The email, Sheets, Slack, and WhatsApp steps also retry, and if one still fails, an alert email fires so the failure is never silent
+6. Every external step retries automatically on failure — the AI call, email, Sheets, Slack, and WhatsApp all included — and if one still fails after retrying, an alert email fires so the failure is never silent
 
 ## Architecture
 
@@ -25,8 +25,8 @@ Webhook (secured) → Normalize Data → Check Duplicate ──duplicate──�
                                                                                         └── No  → Email + Slack  (+ WhatsApp, shipped disabled)
                                                     (in parallel) → Log to Google Sheet
 
-Email / Sheets / Slack / WhatsApp steps retry on failure → still failing after retries →
-routed to an "Alert Me" email instead of failing silently
+Every external step — AI, email, Sheets, Slack, WhatsApp — retries on failure → still
+failing after retries → routed to an "Alert Me" email instead of failing silently
 ```
 
 ## Tech stack
